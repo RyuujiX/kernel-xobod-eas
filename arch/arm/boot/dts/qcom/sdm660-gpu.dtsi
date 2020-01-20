@@ -612,7 +612,7 @@
 
 				qcom,speed-bin = <122>;
 
-				qcom,initial-pwrlevel = <3>;
+				qcom,initial-pwrlevel = <4>;
 
 				/* NOM */
 				qcom,gpu-pwrlevel@0 {
