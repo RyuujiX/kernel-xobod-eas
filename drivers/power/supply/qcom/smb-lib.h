@@ -377,7 +377,6 @@ struct smb_charger {
 };
 
 #ifdef CONFIG_MACH_ASUS_SDM660
-/* ASUS BSP: Add gpio control struct */
 struct gpio_control {
 	u32 ADC_SW_EN;
 	u32 ADCPWREN_PMI_GP1;
@@ -435,6 +434,8 @@ int smblib_get_prop_input_suspend(struct smb_charger *chg,
 				union power_supply_propval *val);
 #ifdef CONFIG_MACH_ASUS_SDM660
 int smblib_get_prop_charging_enabled(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_adapter_id(struct smb_charger *chg,
 				union power_supply_propval *val);
 #endif
 int smblib_get_prop_batt_present(struct smb_charger *chg,
