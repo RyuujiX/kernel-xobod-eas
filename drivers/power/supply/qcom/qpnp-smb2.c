@@ -195,6 +195,7 @@ extern void smblib_asus_monitor_start(struct smb_charger *chg, int time);
 extern bool asus_get_prop_usb_present(struct smb_charger *chg);
 extern void asus_smblib_stay_awake(struct smb_charger *chg);
 extern void asus_smblib_relax(struct smb_charger *chg);
+/* global gpio_control */
 struct gpio_control *global_gpio;
 #endif
 
@@ -973,7 +974,6 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 #ifdef CONFIG_MACH_ASUS_SDM660
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
-	POWER_SUPPLY_PROP_ADAPTER_ID,
 #endif
 };
 
@@ -1091,11 +1091,6 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		val->intval = chg->fcc_stepper_mode;
 		break;
-#ifdef CONFIG_MACH_ASUS_SDM660
-	case POWER_SUPPLY_PROP_ADAPTER_ID:
-		rc = smblib_get_prop_adapter_id(chg, val);
-		break;
-#endif
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;
@@ -2309,11 +2304,12 @@ ssize_t charger_limit_enable_read_proc(struct file *file, char __user *page,
 	int len = 0;
 	int rc;
 
-	if (*ppos)  // CMD call again
+	/* CMD call again */
+	if (*ppos)
 		return 0;
 
-	len = sprintf(read_data,"%d\n", charger_limit_enable_flag);
-	pr_debug("%s , len = %d, data = %s\n", __func__, len, read_data);
+	len = sprintf(read_data, "%d\n", charger_limit_enable_flag);
+	pr_debug("%s, len = %d, data = %s\n", __func__, len, read_data);
 
 	rc = copy_to_user(page, read_data, len);
 	if (rc < 0)
@@ -2340,15 +2336,14 @@ static ssize_t charger_limit_enable_write_proc(struct file *file,
 	if (size >= 32)
 		return -EFAULT;
 
-	if (copy_from_user( &write_data, buff, size ))
+	if (copy_from_user(&write_data, buff, size))
 		return -EFAULT;
 
 	if (write_data[0] == '1') {
 		charger_limit_enable_flag = 1;
-		soc =asus_get_prop_batt_capacity(smbchg_dev);
+		soc = asus_get_prop_batt_capacity(smbchg_dev);
 
 		do_it = charger_limit_value < soc;
-
 		if (do_it) {
 			rc = smblib_masked_write(smbchg_dev,
 						CHARGING_ENABLE_CMD_REG,
@@ -2357,17 +2352,18 @@ static ssize_t charger_limit_enable_write_proc(struct file *file,
 				power_supply_changed(smbchg_dev->batt_psy);
 		}
 
-		pr_debug("%s,  write enable 1 soc = %d, limit-value= %d! \n",
+		pr_debug("%s, write enable 1 soc = %d, limit-value= %d!\n",
 				__func__, soc, charger_limit_value);
 	} else {
 		charger_limit_enable_flag = 0;
+
 		rc = smblib_masked_write(smbchg_dev,
 					CHARGING_ENABLE_CMD_REG,
 					CHARGING_ENABLE_CMD_BIT, 0);
 		if (online)
 			power_supply_changed(smbchg_dev->batt_psy);
 
-		pr_debug("%s, write enable 0,no limit ,charging !!  \n",
+		pr_debug("%s, write enable 0, no limit, charging !!\n",
 				__func__);
 	}
 
@@ -2378,22 +2374,23 @@ static ssize_t charger_limit_enable_write_proc(struct file *file,
 }
 
 static const struct file_operations charger_limit_enable_proc_ops = {
-    .read = charger_limit_enable_read_proc,
-    .write = charger_limit_enable_write_proc,
+	.read = charger_limit_enable_read_proc,
+	.write = charger_limit_enable_write_proc,
 };
 
 ssize_t charger_limit_read_proc(struct file *file, char __user *page,
-					size_t size, loff_t *ppos)
+				size_t size, loff_t *ppos)
 {
 	char read_data[8] = {0};
 	int len = 0;
 	int rc;
 
+	/* CMD call again */
 	if (*ppos)
 		return 0;
 
-	len = sprintf(read_data,"%d\n", charger_limit_value);
-	pr_debug(" %s , len = %d, data = %s\n", __func__, len, read_data);
+	len = sprintf(read_data, "%d\n", charger_limit_value);
+	pr_debug("%s, len = %d, data = %s\n", __func__, len, read_data);
 
 	rc = copy_to_user(page, read_data, len);
 	if (rc < 0)
@@ -2405,8 +2402,8 @@ ssize_t charger_limit_read_proc(struct file *file, char __user *page,
 }
 
 static ssize_t charger_limit_write_proc(struct file *file,
-					const char __user *buff,
-					size_t size, loff_t *ppos)
+					const char __user *buff, size_t size,
+					loff_t *ppos)
 {
 	char write_data[8] = {0};
 	int soc;
@@ -2419,7 +2416,7 @@ static ssize_t charger_limit_write_proc(struct file *file,
 	if (size >= 32)
 		return -EFAULT;
 
-	if (copy_from_user( &write_data, buff, size ))
+	if (copy_from_user(&write_data, buff, size))
 		return -EFAULT;
 
 	if (write_data[0] == '0')
@@ -2436,29 +2433,30 @@ static ssize_t charger_limit_write_proc(struct file *file,
 	charger_limit_enable_flag = !!charger_limit_value;
 	if (!charger_limit_enable_flag) {
 		smblib_masked_write(smbchg_dev, CHARGING_ENABLE_CMD_REG,
-						CHARGING_ENABLE_CMD_BIT, 0);
+					CHARGING_ENABLE_CMD_BIT, 0);
 		if (online)
 			power_supply_changed(smbchg_dev->batt_psy);
 	} else {
 		do_it = charger_limit_value < soc;
 		if (do_it) {
-			smblib_masked_write(smbchg_dev, CHARGING_ENABLE_CMD_REG,
+			smblib_masked_write(smbchg_dev,
+						CHARGING_ENABLE_CMD_REG,
 						CHARGING_ENABLE_CMD_BIT, 1);
 			if (online)
 				power_supply_changed(smbchg_dev->batt_psy);
 		}
 	}
 
-	pr_debug(" %s, limit-value= %d, current-soc = %d\n", __func__,
+	pr_debug("%s, limit-value= %d, current-soc = %d\n", __func__,
 			charger_limit_value, soc);
-	pr_debug(" %s, limit-flag= %d\n", __func__, charger_limit_enable_flag);
+	pr_debug("%s, limit-flag= %d\n", __func__, charger_limit_enable_flag);
 
 	return size;
 }
 
 static const struct file_operations charger_limit_proc_ops = {
-    .read = charger_limit_read_proc,
-    .write = charger_limit_write_proc,
+	.read = charger_limit_read_proc,
+	.write = charger_limit_write_proc,
 };
 
 static int init_proc_charger_limit(void)
@@ -2467,28 +2465,26 @@ static int init_proc_charger_limit(void)
 
 	limit_enable_entry = proc_create(CHARGER_LIMIT_EN_PROC_FILE, 0666,
 					NULL, &charger_limit_enable_proc_ops);
-
-	if (limit_enable_entry == NULL)	{
-		pr_debug("create_proc entry %s failed\n",
-				CHARGER_LIMIT_EN_PROC_FILE);
-		return -ENOMEM;
-	} else {
+	if (limit_enable_entry != NULL) {
 		pr_debug("create proc entry %s success",
 				CHARGER_LIMIT_EN_PROC_FILE);
 		ret = 0;
+	} else {
+		pr_err("create_proc entry %s failed\n",
+			CHARGER_LIMIT_EN_PROC_FILE);
+		return -ENOMEM;
 	}
 
 	limit_entry = proc_create(CHARGER_LIMIT_PROC_FILE, 0666, NULL,
 					&charger_limit_proc_ops);
-
-	if (limit_entry == NULL) {
-		pr_debug("create_proc entry %s failed\n",
-				CHARGER_LIMIT_PROC_FILE);
-		return -ENOMEM;
-	} else {
+	if (limit_entry != NULL) {
 		pr_debug("create proc entry %s success",
 				CHARGER_LIMIT_PROC_FILE);
 		ret = 0;
+	} else {
+		pr_err("create_proc entry %s failed\n",
+			CHARGER_LIMIT_PROC_FILE);
+		return -ENOMEM;
 	}
 
 	return ret;
@@ -2508,23 +2504,23 @@ int32_t get_ID_vadc_voltage(void)
 
 	vadc_dev = qpnp_get_vadc(smbchg_dev->dev, "pm-gpio3");
 	if (IS_ERR(vadc_dev)) {
-		pr_debug("%s: qpnp_get_vadc failed\n", __func__);
-		return -1;
-	} else {
-		/* Read the GPIO2 VADC channel with 1:1 scaling */
-		qpnp_vadc_read(vadc_dev, VADC_AMUX2_GPIO, &adc_result);
-		adc = (int) adc_result.physical;
-
-		/* uV to mV */
-		adc = adc / 1000;
-
-		pr_debug("%s: adc=%d adc_result.physical=%lld adc_result.chan=0x%x\n",
-			__func__, adc,adc_result.physical,adc_result.chan);
+		pr_err("%s: qpnp_get_vadc failed\n", __func__);
+		return PTR_ERR(vadc_dev);
 	}
+
+	/* Read the GPIO2 VADC channel with 1:1 scaling */
+	qpnp_vadc_read(vadc_dev, VADC_AMUX2_GPIO, &adc_result);
+	adc = (int) adc_result.physical;
+
+	/* uV to mV */
+	adc = adc / 1000;
+
+	pr_debug("%s: adc=%d adc_result.physical=%lld adc_result.chan=0x%x\n",
+			__func__, adc, adc_result.physical, adc_result.chan);
 
 	return adc;
 }
-#endif
+#endif /* CONFIG_MACH_ASUS_SDM660 */
 
 static int smb2_probe(struct platform_device *pdev)
 {
@@ -2543,9 +2539,10 @@ static int smb2_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 #ifdef CONFIG_MACH_ASUS_SDM660
-	gpio_ctrl = devm_kzalloc(&pdev->dev, sizeof(*gpio_ctrl), GFP_KERNEL);
+	/* ASUS BSP: allocate GPIO control */
 	pr_debug("ADC_SW_EN=%d, ADCPWREN_PMI_GP1=%d\n", gpio_ctrl->ADC_SW_EN,
-		gpio_ctrl->ADCPWREN_PMI_GP1);
+			gpio_ctrl->ADCPWREN_PMI_GP1);
+	gpio_ctrl = devm_kzalloc(&pdev->dev, sizeof(*gpio_ctrl), GFP_KERNEL);
 	if (!gpio_ctrl)
 		return -ENOMEM;
 #endif
@@ -2559,41 +2556,45 @@ static int smb2_probe(struct platform_device *pdev)
 	chg->mode = PARALLEL_MASTER;
 	chg->irq_info = smb2_irqs;
 	chg->name = "PMI";
-
 #ifdef CONFIG_MACH_ASUS_SDM660
 	wake_lock_init(&asus_chg_lock, WAKE_LOCK_SUSPEND, "asus_chg_lock");
 
+	/* ASUS BSP: add globe device struct */
 	smbchg_dev = chg;
+
+	/* ASUS BSP: add gpio control struct */
 	global_gpio = gpio_ctrl;
 
+	/* ASUS BSP: Request ADC_SW_EN-gpios59, ADCPWREN_PMI_GP1-gpios34 */
 	gpio_ctrl->ADC_SW_EN = of_get_named_gpio(pdev->dev.of_node,
 						"ADC_SW_EN-gpios59", 0);
 
 	rc = gpio_request(gpio_ctrl->ADC_SW_EN, "ADC_SW_EN-gpios59");
 	if (rc)
-		pr_err("%s: failed to request ADC_SW_EN-gpios59\n", __func__);
+		pr_err("%s: failed to request ADC_SW_EN-gpios59\n",
+			__func__);
 	else
 		pr_debug("%s: Success to request ADC_SW_EN-gpios59 %d\n",
-			__func__, (int)gpio_ctrl->ADC_SW_EN);
+				__func__, (int)gpio_ctrl->ADC_SW_EN);
 
 	gpio_ctrl->ADCPWREN_PMI_GP1 = of_get_named_gpio(pdev->dev.of_node,
 						"ADCPWREN_PMI_GP1-gpios34", 0);
 
 	rc = gpio_request(gpio_ctrl->ADCPWREN_PMI_GP1,
-					"ADCPWREN_PMI_GP1-gpios34");
+				"ADCPWREN_PMI_GP1-gpios34");
 	if (rc)
 		pr_err("%s: failed to request ADCPWREN_PMI_GP1-gpios34\n",
 			__func__);
 	else {
 		pr_debug("%s: Success to request ADCPWREN_PMI_GP1-gpios34 %d\n",
-			__func__, (int)gpio_ctrl->ADCPWREN_PMI_GP1);
+				__func__, (int)gpio_ctrl->ADCPWREN_PMI_GP1);
 
 		gpio_direction_output(gpio_ctrl->ADCPWREN_PMI_GP1, 0);
 	}
 
 	rc = gpio_get_value(gpio_ctrl->ADCPWREN_PMI_GP1);
 	pr_debug("ADCPWREN_PMI_GP1 init H/L %d\n", rc);
-#endif
+#endif /* CONFIG_MACH_ASUS_SDM660 */
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {
@@ -2711,6 +2712,7 @@ static int smb2_probe(struct platform_device *pdev)
 #ifdef CONFIG_MACH_ASUS_SDM660
 	init_proc_charger_limit();
 #endif
+
 	smb2_create_debugfs(chip);
 
 	rc = smblib_get_prop_usb_present(chg, &val);
@@ -2748,7 +2750,6 @@ static int smb2_probe(struct platform_device *pdev)
 	rc = smblib_masked_write(smbchg_dev, USBIN_OPTIONS_1_CFG_REG,
 					HVDCP_EN_BIT, 0x0);
 	rc = smblib_read(smbchg_dev, USBIN_OPTIONS_1_CFG_REG, &HVDVP_reg);
-
 	if (rc < 0)
 		pr_err("%s: Failed to set USBIN_OPTIONS_1_CFG_REG\n", __func__);
 
@@ -2821,7 +2822,7 @@ static int smb2_resume(struct device *dev)
 
 	return 0;
 }
-#endif
+#endif /* CONFIG_MACH_ASUS_SDM660 */
 
 static int smb2_remove(struct platform_device *pdev)
 {
